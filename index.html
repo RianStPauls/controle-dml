@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Controle de Produtos DML</title>
+<style>
+[hidden] { display: none !important; }
+body { margin: 0; }
+/* Layout: faixa Indigo no topo com abas; conteúdo em coluna única até 1100px; ficha em lista de produtos, semana em resumo + tabela + fichas */
+:root {
+  --indigo: #001c30;
+  --ruby: #820021;
+  --green: #002617;
+  --bg: #f6f7f8;
+  --surface: #ffffff;
+  --fg: #001c30;
+  --muted: #5a6875;
+  --line: #dde1e5;
+  --soft: #eef0f2;
+  --accent: #820021;
+  --accent-fg: #ffffff;
+  --head-bg: #001c30;
+  --head-fg: #ffffff;
+  --ok-bg: #cad4d0; --ok-fg: #002617;
+  --wait-bg: #fbe7c6; --wait-fg: #6b4100;
+  --miss-bg: #e6ccd3; --miss-fg: #820021;
+  --font: "Century Gothic", CenturyGothic, "Apple SD Gothic Neo", "Avenir Next", Avenir, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0b141c; --surface: #111e29; --fg: #e8ecef; --muted: #99a4ac; --line: #263644; --soft: #18293a;
+  --accent: #dc6678; --accent-fg: #0b141c; --head-bg: #001c30; --head-fg: #ffffff;
+  --ok-bg: #334d3f; --ok-fg: #e3ebe7; --wait-bg: #4a3712; --wait-fg: #f6deb0; --miss-bg: #5c1a2a; --miss-fg: #f3d5db;
+  color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0b141c; --surface: #111e29; --fg: #e8ecef; --muted: #99a4ac; --line: #263644; --soft: #18293a;
+  --accent: #dc6678; --accent-fg: #0b141c; --head-bg: #001c30; --head-fg: #ffffff;
+  --ok-bg: #334d3f; --ok-fg: #e3ebe7; --wait-bg: #4a3712; --wait-fg: #f6deb0; --miss-bg: #5c1a2a; --miss-fg: #f3d5db;
+  color-scheme: dark }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 15px; line-height: 1.45; }
+.wrap { max-width: 1100px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header { background: var(--head-bg); color: var(--head-fg); border-bottom: 4px solid #820021; }
+header .wrap { padding-block: 18px 0; display: flex; flex-direction: column; gap: 14px; }
+.brand { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.brand h1 { margin: 0; font-size: 22px; letter-spacing: .02em; font-weight: 700; }
+.brand span { font-size: 13px; color: #ccd0d5; }
+nav { display: flex; gap: 4px; }
+nav button { background: transparent; color: #ccd0d5; border: 0; padding: 10px 16px; font: inherit; font-weight: 700; cursor: pointer; border-radius: 6px 6px 0 0; }
+nav button[aria-selected="true"] { background: var(--bg); color: var(--fg); }
+nav button:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+main .wrap { padding-block: 24px 48px; display: flex; flex-direction: column; gap: 20px; }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+h2 { margin: 0; font-size: 17px; }
+.eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); font-weight: 700; }
+.grid4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+label.f { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 700; color: var(--muted); }
+input, select, textarea { font: inherit; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 9px 10px; min-width: 0; }
+textarea { resize: vertical; min-height: 60px; }
+.req::after { content: " *"; color: var(--accent); }
+
+.btn { font: inherit; font-weight: 700; border-radius: 6px; padding: 10px 16px; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--fg); }
+.btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.btn.small { padding: 6px 10px; font-size: 13px; }
+.btn.danger { color: var(--accent); }
+.btn.danger.armed { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.btn:disabled { opacity: .5; cursor: default; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.spacer { flex: 1; }
+
+.prodtools { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.prodtools input { flex: 1 1 220px; }
+.plist { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.prow { display: grid; grid-template-columns: 1fr 90px 140px; gap: 10px; align-items: center; padding: 7px 10px; border-top: 1px solid var(--line); }
+.prow:first-child { border-top: 0; }
+.prow.has { background: var(--soft); }
+.prow .pn { font-size: 14px; min-width: 0; }
+.prow input { text-align: center; padding: 7px 6px; font-variant-numeric: tabular-nums; }
+.prow select { padding: 7px 6px; font-size: 13px; }
+.prow select:disabled { opacity: .35; }
+.phead { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; background: var(--soft); }
+@media (max-width: 520px) { .prow { grid-template-columns: 1fr 70px; } .prow select, .phead .st { grid-column: 1 / -1; } .phead .st { display: none; } }
+.formfoot { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+.count { font-size: 13px; color: var(--muted); }
+.msg { font-size: 14px; font-weight: 700; }
+.msg.ok { color: var(--ok-fg); background: var(--ok-bg); padding: 8px 12px; border-radius: 6px; }
+.msg.err { color: var(--miss-fg); background: var(--miss-bg); padding: 8px 12px; border-radius: 6px; }
+
+.weeknav { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.weeknav .wk { display: flex; flex-direction: column; min-width: 0; }
+.weeknav .wk strong { font-size: 18px; }
+.weeknav .wk span { font-size: 13px; color: var(--muted); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+.stat { border: 1px solid var(--line); border-radius: 6px; padding: 12px; background: var(--surface); }
+.stat b { display: block; font-size: 26px; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 12px; color: var(--muted); }
+
+.tablebox { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; position: sticky; left: 0; background: var(--surface); }
+thead th { background: var(--soft); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+thead th:first-child { background: var(--soft); }
+td.z { color: var(--line); }
+td.tot, th.tot { font-weight: 700; background: var(--soft); }
+tbody tr:last-child td { border-bottom: 0; }
+
+.fichas { display: flex; flex-direction: column; gap: 10px; }
+.ficha { border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.ficha .top { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.ficha .dml { font-weight: 700; }
+.ficha .meta { font-size: 13px; color: var(--muted); }
+.ficha ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+.ficha li { font-size: 13px; background: var(--soft); border-radius: 4px; padding: 3px 8px; }
+.ficha li b { font-variant-numeric: tabular-nums; }
+.ficha .obs { font-size: 13px; font-style: italic; color: var(--muted); }
+.pill { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; border-radius: 999px; padding: 3px 9px; }
+.pill.ok { background: var(--ok-bg); color: var(--ok-fg); }
+.pill.wait { background: var(--wait-bg); color: var(--wait-fg); }
+.pill.miss { background: var(--miss-bg); color: var(--miss-fg); }
+li .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+li .dot.ok { background: #334d3f; } li .dot.wait { background: #c98a16; } li .dot.miss { background: #ad3349; }
+.empty { color: var(--muted); font-size: 14px; padding: 18px; text-align: center; border: 1px dashed var(--line); border-radius: 6px; }
+.note { font-size: 13px; color: var(--muted); }
+.brand .sp { flex: 1; }
+.auth { display: flex; gap: 10px; align-items: center; font-size: 13px; color: #ccd0d5; }
+.auth button { font: inherit; font-weight: 700; background: transparent; color: #fff; border: 1px solid #667381; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+.login { max-width: 420px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="brand"><h1>Controle de Produtos · DML</h1><span>St. Paul's School · Operações</span><span class="sp"></span>
+      <div class="auth"><span id="who" hidden></span><button id="btnEntrar" type="button">Entrar</button><button id="btnSair" type="button" hidden>Sair</button></div></div>
+    <nav role="tablist">
+      <button id="tab-nova" role="tab" aria-selected="false" data-view="nova" hidden>Nova ficha</button>
+      <button id="tab-semanas" role="tab" aria-selected="true" data-view="semanas">Semanas</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- NOVA FICHA -->
+  <section class="wrap" id="view-login" hidden>
+    <form class="panel login" id="loginForm">
+      <div><div class="eyebrow">Acesso de edição</div><h2>Entrar para registrar fichas</h2></div>
+      <label class="f"><span>E-mail</span><input id="lEmail" type="email" autocomplete="username" required></label>
+      <label class="f"><span>Senha</span><input id="lSenha" type="password" autocomplete="current-password" required></label>
+      <div id="loginMsg" role="status"></div>
+      <div class="row"><button class="btn" id="btnLoginCancel" type="button">Voltar</button><button class="btn primary" type="submit">Entrar</button></div>
+    </form>
+  </section>
+
+  <section class="wrap" id="view-nova" hidden>
+    <div class="panel">
+      <div class="row"><div><div class="eyebrow" id="formEyebrow">Nova ficha</div><h2 id="formTitle">Registrar solicitação de produtos</h2></div></div>
+      <div class="grid4">
+        <label class="f"><span class="req">DML</span>
+          <select id="fDml"><option value="">Escolha o DML</option></select></label>
+        <label class="f"><span class="req">Nome do solicitante</span>
+          <input id="fSol" list="solList" autocomplete="off" placeholder="Quem pediu"></label>
+        <label class="f"><span class="req">Data da solicitação</span>
+          <input id="fDataSol" type="date"></label>
+        <label class="f"><span>Data da entrega</span>
+          <input id="fDataEnt" type="date"></label>
+      </div>
+      <datalist id="solList"></datalist>
+    </div>
+
+    <div class="panel" style="margin-top:20px">
+      <div class="row"><h2>Produtos</h2><span class="spacer"></span><span class="count" id="selCount">Nenhum produto preenchido</span></div>
+      <div class="prodtools">
+        <input id="fBusca" type="search" placeholder="Buscar produto (ex.: saco preto, papel)">
+        <button class="btn small" id="btnTodosEntregues" type="button">Marcar todos como entregues</button>
+      </div>
+      <div class="plist" id="plist"></div>
+      <label class="f"><span>Observação</span><textarea id="fObs" placeholder="Opcional"></textarea></label>
+      <div class="formfoot">
+        <div id="formMsg" role="status"></div>
+        <div class="row">
+          <button class="btn" id="btnCancelar" type="button" hidden>Cancelar edição</button>
+          <button class="btn" id="btnLimpar" type="button">Limpar</button>
+          <button class="btn primary" id="btnSalvar" type="button">Salvar ficha</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SEMANAS -->
+  <section class="wrap" id="view-semanas">
+    <div class="panel">
+      <div class="weeknav">
+        <button class="btn small" id="wPrev" type="button" aria-label="Semana anterior">‹</button>
+        <div class="wk"><strong id="wLabel">Semana</strong><span id="wRange"></span></div>
+        <button class="btn small" id="wNext" type="button" aria-label="Próxima semana">›</button>
+        <button class="btn small" id="wHoje" type="button">Esta semana</button>
+        <span class="spacer"></span>
+        <select id="wDml" aria-label="Filtrar por DML"><option value="">Todos os DMLs</option></select>
+        <button class="btn small" id="wCsv" type="button" hidden>Baixar planilha (CSV)</button>
+      </div>
+      <div class="note" id="wNote"></div>
+      <div class="stats">
+        <div class="stat"><b id="sFichas">0</b><span>fichas</span></div>
+        <div class="stat"><b id="sItens">0</b><span>unidades solicitadas</span></div>
+        <div class="stat"><b id="sDmls">0</b><span>DMLs atendidos</span></div>
+        <div class="stat"><b id="sPend">0</b><span>itens pendentes</span></div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:20px">
+      <h2>Total por produto e DML</h2>
+      <div id="matrix"></div>
+    </div>
+
+    <div class="panel" style="margin-top:20px">
+      <h2>Fichas da semana</h2>
+      <div class="fichas" id="fichas"></div>
+    </div>
+  </section>
+</main>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, doc, addDoc, setDoc, getDoc, deleteDoc, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBG4ST0ek4lB9aHuLoo3RX9wcxk9dvNia8",
+  authDomain: "controle-dml.firebaseapp.com",
+  projectId: "controle-dml",
+  storageBucket: "controle-dml.firebasestorage.app",
+  messagingSenderId: "689870437662",
+  appId: "1:689870437662:web:484d92cb2ae40568101d0f"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const fs = getFirestore(app);
+const fichasCol = collection(fs, "fichas");
+
+const PRODUTOS = [
+  "Pano laranja","Esponja dupla face","Fibra verde","Guardanapo / caixa",
+  "Papel higiênico interfolhado","Papel higiênico rolo","Papel toalha interfolhado","Papel toalha rolo",
+  "Saco de lixo marrom 20L / 50 un","Saco de lixo marrom 40L / 50 un","Saco de lixo marrom 60L / 50 un","Saco de lixo marrom 100L / 50 un",
+  "Saco de lixo preto 20L / 50 un","Saco de lixo preto 40L / 50 un","Saco de lixo preto 60L / 50 un","Saco de lixo preto 100L / 50 un",
+  "Saco de lixo verde 20L / 50 un","Saco de lixo verde 40L / 50 un","Saco de lixo verde 60L / 50 un","Saco de lixo verde 100L / 50 un",
+  "Sanitizante de assento","Álcool - caixa c/ 4","Sabonete - caixa c/ 6","D27 - galão 5L","Suma Piso","Detergente neutro",
+  "K2R o limpa inox","Blintech para vidros","Desinfetante","Carefree Pro XB","Virex","Removedor Freedom","Kaflex",
+  "Remocem","Perox","Lustra móveis","Saquinho coletor"
+];
+const DMLS = ["Pre-prep","Prep","Senior","Form six","Enfermaria","Biblioteca","Music","Science","Térreo","Sport"];
+const STATUS = { e: ["Entregue","ok"], p: ["Pendente","wait"], f: ["Sem estoque","miss"] };
+const MESES = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+// ---------- datas ----------
+function ymd(d) { return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); }
+function parse(s) { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); }
+function mondayOf(s) { const d = parse(s); const wd = (d.getDay()+6)%7; d.setDate(d.getDate()-wd); return ymd(d); }
+function addDays(s, n) { const d = parse(s); d.setDate(d.getDate()+n); return ymd(d); }
+function br(s) { if (!s) return ""; const [y,m,d] = s.split("-"); return d + "/" + m + "/" + y; }
+function isoWeek(s) { const d = parse(s); d.setDate(d.getDate() + 3 - (d.getDay()+6)%7); const w1 = new Date(d.getFullYear(),0,4); return 1 + Math.round(((d - w1)/864e5 - 3 + (w1.getDay()+6)%7)/7); }
+function rangeLabel(mon) { const a = parse(mon), b = parse(addDays(mon,6));
+  return a.getDate() + " " + MESES[a.getMonth()] + (a.getFullYear()!==b.getFullYear() ? " " + a.getFullYear() : "") + " a " + b.getDate() + " " + MESES[b.getMonth()] + " " + b.getFullYear(); }
+const hoje = ymd(new Date());
+
+// ---------- estado ----------
+let db = true, canWrite = false;
+let editingId = null;
+let qtd = {}, st = {};          // por índice do produto
+let week = mondayOf(hoje), weekDocs = [], unsub = null, loadTimer = null, loaded = false;
+
+// ---------- abas ----------
+function show(view) {
+  for (const b of document.querySelectorAll("nav button")) b.setAttribute("aria-selected", String(b.dataset.view === view));
+  $("view-nova").hidden = view !== "nova";
+  $("view-semanas").hidden = view !== "semanas";
+  $("view-login").hidden = view !== "login";
+  if (view === "semanas") subscribeWeek();
+}
+document.querySelectorAll("nav button").forEach(b => b.addEventListener("click", () => show(b.dataset.view)));
+
+// ---------- formulário ----------
+for (const d of DMLS) { $("fDml").insertAdjacentHTML("beforeend", `<option value="${esc(d)}">DML - ${esc(d)}</option>`);
+                        $("wDml").insertAdjacentHTML("beforeend", `<option value="${esc(d)}">DML - ${esc(d)}</option>`); }
+
+function renderProdutos() {
+  const q = $("fBusca").value.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+  let html = `<div class="prow phead"><span>Produto</span><span style="text-align:center">Qtd.</span><span class="st">Status</span></div>`;
+  PRODUTOS.forEach((p, i) => {
+    const key = p.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+    if (q && !q.split(/\s+/).every(t => key.includes(t))) return;
+    const has = qtd[i] > 0;
+    html += `<div class="prow${has ? " has" : ""}" data-i="${i}">
+      <label class="pn" for="q${i}">${esc(p)}</label>
+      <input id="q${i}" type="number" min="0" step="1" inputmode="numeric" value="${has ? qtd[i] : ""}" placeholder="0">
+      <select id="s${i}" aria-label="Status de ${esc(p)}" ${has ? "" : "disabled"}>
+        ${Object.entries(STATUS).map(([k,[t]]) => `<option value="${k}"${(st[i]||"p")===k ? " selected" : ""}>${t}</option>`).join("")}
+      </select></div>`;
+  });
+  $("plist").innerHTML = html;
+  updateCount();
+}
+$("plist").addEventListener("input", e => {
+  const row = e.target.closest(".prow"); if (!row || row.classList.contains("phead")) return;
+  const i = +row.dataset.i;
+  if (e.target.tagName === "INPUT") {
+    const v = Math.max(0, Math.floor(+e.target.value || 0));
+    if (v > 0) qtd[i] = v; else delete qtd[i];
+    row.classList.toggle("has", v > 0);
+    row.querySelector("select").disabled = !(v > 0);
+    updateCount();
+  }
+});
+$("plist").addEventListener("change", e => {
+  if (e.target.tagName === "SELECT") { const i = +e.target.closest(".prow").dataset.i; st[i] = e.target.value; }
+});
+$("fBusca").addEventListener("input", renderProdutos);
+$("btnTodosEntregues").addEventListener("click", () => {
+  for (const i of Object.keys(qtd)) st[i] = "e";
+  if (!$("fDataEnt").value) $("fDataEnt").value = hoje;
+  renderProdutos();
+});
+function updateCount() {
+  const n = Object.keys(qtd).length, u = Object.values(qtd).reduce((a,b) => a+b, 0);
+  $("selCount").textContent = n ? `${n} produto${n>1?"s":""} · ${u} unidade${u>1?"s":""}` : "Nenhum produto preenchido";
+}
+function msg(text, kind) { $("formMsg").innerHTML = text ? `<div class="msg ${kind}">${esc(text)}</div>` : ""; }
+
+function resetForm(keepMsg) {
+  editingId = null; qtd = {}; st = {};
+  $("fDml").value = ""; $("fSol").value = ""; $("fDataSol").value = hoje; $("fDataEnt").value = ""; $("fObs").value = ""; $("fBusca").value = "";
+  $("formEyebrow").textContent = "Nova ficha"; $("formTitle").textContent = "Registrar solicitação de produtos";
+  $("btnSalvar").textContent = "Salvar ficha"; $("btnCancelar").hidden = true;
+  if (!keepMsg) msg("");
+  renderProdutos();
+}
+$("btnLimpar").addEventListener("click", () => resetForm());
+$("btnCancelar").addEventListener("click", () => { resetForm(); show("semanas"); });
+
+function loadIntoForm(id, f) {
+  editingId = id; qtd = {}; st = {};
+  for (const it of (f.itens || [])) { const i = PRODUTOS.indexOf(it.p); if (i >= 0) { qtd[i] = it.q; st[i] = it.s || "p"; } }
+  $("fDml").value = f.dml || ""; $("fSol").value = f.solicitante || ""; $("fDataSol").value = f.dataSolicitacao || hoje;
+  $("fDataEnt").value = f.dataEntrega || ""; $("fObs").value = f.obs || ""; $("fBusca").value = "";
+  $("formEyebrow").textContent = "Editando ficha"; $("formTitle").textContent = `DML - ${f.dml} · ${f.solicitante}`;
+  $("btnSalvar").textContent = "Salvar alterações"; $("btnCancelar").hidden = false;
+  msg(""); renderProdutos(); show("nova"); window.scrollTo({ top: 0 });
+}
+
+// nomes recentes (só neste navegador)
+function recentNames() { try { return JSON.parse(localStorage.getItem("dml-nomes") || "[]"); } catch { return []; } }
+function rememberName(n) { try { const l = [n, ...recentNames().filter(x => x !== n)].slice(0, 40); localStorage.setItem("dml-nomes", JSON.stringify(l)); } catch {} fillNames(); }
+function fillNames() { $("solList").innerHTML = recentNames().map(n => `<option value="${esc(n)}">`).join(""); }
+
+$("btnSalvar").addEventListener("click", async () => {
+  const dml = $("fDml").value, sol = $("fSol").value.trim(), ds = $("fDataSol").value, de = $("fDataEnt").value;
+  if (!dml) return msg("Escolha o DML.", "err");
+  if (!sol) return msg("Preencha o nome do solicitante.", "err");
+  if (!ds) return msg("Preencha a data da solicitação.", "err");
+  if (de && de < ds) return msg("A data de entrega está antes da data de solicitação.", "err");
+  const itens = PRODUTOS.map((p, i) => qtd[i] > 0 ? { p, q: qtd[i], s: st[i] || "p" } : null).filter(Boolean);
+  if (!itens.length) return msg("Preencha a quantidade de pelo menos um produto.", "err");
+  if (!db) return msg("Não deu para conectar ao banco de dados agora. Tente de novo em instantes.", "err");
+  const body = { dml, solicitante: sol, dataSolicitacao: ds, dataEntrega: de || "", semana: mondayOf(ds), itens, obs: $("fObs").value.trim() };
+  $("btnSalvar").disabled = true;
+  try {
+    if (editingId) {
+      const ref = doc(fs, "fichas", editingId);
+      const old = await getDoc(ref);
+      await setDoc(ref, { ...body, criadoEm: old.exists() ? (old.data().criadoEm || new Date().toISOString()) : new Date().toISOString(), editadoEm: new Date().toISOString() });
+    } else {
+      await addDoc(fichasCol, { ...body, criadoEm: new Date().toISOString() });
+    }
+    rememberName(sol);
+    const wasEdit = !!editingId;
+    resetForm(true);
+    msg(wasEdit ? "Alterações salvas." : `Ficha salva: DML - ${dml}, ${itens.length} produto${itens.length>1?"s":""}.`, "ok");
+  } catch (e) {
+    if (e && e.code === "permission-denied") msg("Sem permissão para salvar. Entre de novo com seu e-mail e senha.", "err");
+    else msg("Não foi possível salvar agora. Confira a conexão e tente de novo.", "err");
+  } finally { $("btnSalvar").disabled = false; }
+});
+
+function applyWriteAccess() {
+  $("btnSalvar").disabled = !canWrite;
+  $("tab-nova").hidden = !canWrite;
+  if (!canWrite && !$("view-nova").hidden) show("semanas");
+  renderWeek();
+}
+
+// ---------- semanas ----------
+function subscribeWeek() {
+  $("wLabel").textContent = `Semana ${isoWeek(week)}` + (week === mondayOf(hoje) ? " (atual)" : "");
+  $("wRange").textContent = rangeLabel(week);
+  if (!db) { renderWeek(); return; }
+  if (unsub && unsub.week === week) return;
+  if (unsub) unsub();
+  loaded = false; weekDocs = []; renderWeek();
+  clearTimeout(loadTimer);
+  loadTimer = setTimeout(() => { if (!loaded) $("wNote").textContent = "Os dados ainda não carregaram. Confira a conexão; a página continua tentando."; }, 10000);
+  const w = week;
+  const u = onSnapshot(query(fichasCol, where("semana", "==", w)), snap => {
+    if (w !== week) return;
+    weekDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (!snap.metadata.fromCache) { loaded = true; clearTimeout(loadTimer); $("wNote").textContent = ""; }
+    renderWeek();
+  }, err => {
+    clearTimeout(loadTimer); loaded = true;
+    $("wNote").textContent = "Não foi possível carregar as fichas desta semana. Recarregue a página para tentar de novo.";
+    renderWeek();
+  });
+  unsub = () => u(); unsub.week = w;
+}
+$("wPrev").addEventListener("click", () => { week = addDays(week, -7); subscribeWeek(); });
+$("wNext").addEventListener("click", () => { week = addDays(week, 7); subscribeWeek(); });
+$("wHoje").addEventListener("click", () => { week = mondayOf(hoje); subscribeWeek(); });
+$("wDml").addEventListener("change", renderWeek);
+
+function fichaStatus(f) {
+  const s = (f.itens || []).map(i => i.s);
+  if (!s.length || s.some(x => x === "p")) return "p";
+  return s.every(x => x === "f") ? "f" : "e";
+}
+
+function filtered() {
+  const d = $("wDml").value;
+  return weekDocs.filter(f => !d || f.dml === d)
+    .sort((a, b) => (a.dataSolicitacao + a.criadoEm).localeCompare(b.dataSolicitacao + b.criadoEm));
+}
+
+function renderWeek() {
+  const list = filtered();
+  const units = list.reduce((a, f) => a + (f.itens||[]).reduce((x, i) => x + i.q, 0), 0);
+  $("sFichas").textContent = list.length;
+  $("sItens").textContent = units;
+  $("sDmls").textContent = new Set(list.map(f => f.dml)).size;
+  $("sPend").textContent = list.reduce((a, f) => a + (f.itens||[]).filter(i => i.s === "p").length, 0);
+  $("wCsv").hidden = !list.length;
+
+  // matriz produto × DML
+  const dmls = DMLS.filter(d => list.some(f => f.dml === d));
+  const tot = {};
+  for (const f of list) for (const it of f.itens || []) { tot[it.p] ??= {}; tot[it.p][f.dml] = (tot[it.p][f.dml] || 0) + it.q; }
+  const prods = PRODUTOS.filter(p => tot[p]).concat(Object.keys(tot).filter(p => !PRODUTOS.includes(p)));
+  if (!prods.length) {
+    $("matrix").innerHTML = `<div class="empty">${loaded || !db ? "Nenhum produto registrado nesta semana." : "Carregando…"}</div>`;
+  } else {
+    let h = `<div class="tablebox"><table><thead><tr><th>Produto</th>${dmls.map(d => `<th>${esc(d)}</th>`).join("")}<th class="tot">Total</th></tr></thead><tbody>`;
+    for (const p of prods) {
+      const t = dmls.reduce((a, d) => a + (tot[p][d] || 0), 0);
+      h += `<tr><td>${esc(p)}</td>${dmls.map(d => tot[p][d] ? `<td>${tot[p][d]}</td>` : `<td class="z">–</td>`).join("")}<td class="tot">${t}</td></tr>`;
+    }
+    h += `</tbody></table></div>`;
+    $("matrix").innerHTML = h;
+  }
+
+  // fichas
+  if (!list.length) {
+    $("fichas").innerHTML = `<div class="empty">${loaded || !db ? "Nenhuma ficha nesta semana. As fichas aparecem aqui pela data da solicitação." : "Carregando…"}</div>`;
+    return;
+  }
+  $("fichas").innerHTML = list.map(f => {
+    const s = fichaStatus(f), [lbl, cls] = STATUS[s];
+    return `<article class="ficha" data-id="${esc(f.id)}">
+      <div class="top"><span class="dml">DML - ${esc(f.dml)}</span><span class="pill ${cls}">${lbl}</span><span class="spacer"></span>
+        ${canWrite ? `<button class="btn small" data-act="edit" type="button">Editar</button><button class="btn small danger" data-act="del" type="button">Excluir</button>` : ""}</div>
+      <div class="meta">Solicitante: <b>${esc(f.solicitante)}</b> · Solicitado em ${br(f.dataSolicitacao)} · ${f.dataEntrega ? "Entregue em " + br(f.dataEntrega) : "Sem data de entrega"}</div>
+      <ul>${(f.itens||[]).map(i => `<li><span class="dot ${STATUS[i.s||"p"][1]}" title="${STATUS[i.s||"p"][0]}"></span>${esc(i.p)} <b>× ${i.q}</b></li>`).join("")}</ul>
+      ${f.obs ? `<div class="obs">${esc(f.obs)}</div>` : ""}
+    </article>`;
+  }).join("");
+}
+
+$("fichas").addEventListener("click", async e => {
+  const b = e.target.closest("button[data-act]"); if (!b) return;
+  const id = b.closest(".ficha").dataset.id, f = weekDocs.find(x => x.id === id); if (!f) return;
+  if (b.dataset.act === "edit") return loadIntoForm(id, f);
+  if (!b.classList.contains("armed")) {
+    b.classList.add("armed"); b.textContent = "Confirmar exclusão";
+    setTimeout(() => { if (b.isConnected) { b.classList.remove("armed"); b.textContent = "Excluir"; } }, 4000);
+    return;
+  }
+  b.disabled = true;
+  try { await deleteDoc(doc(fs, "fichas", id)); }
+  catch { b.disabled = false; b.textContent = "Não excluiu, tente de novo"; }
+});
+
+$("wCsv").addEventListener("click", async () => {
+  const list = filtered();
+  const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const rows = [["Semana", "DML", "Solicitante", "Data solicitação", "Data entrega", "Produto", "Quantidade", "Status", "Observação"]];
+  for (const f of list) for (const i of f.itens || [])
+    rows.push([`${br(week)} a ${br(addDays(week,6))}`, "DML - " + f.dml, f.solicitante, br(f.dataSolicitacao), br(f.dataEntrega), i.p, i.q, STATUS[i.s||"p"][0], f.obs || ""]);
+  const csv = "﻿" + rows.map(r => r.map(q).join(";")).join("\r\n");
+  const dsel = $("wDml").value;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  a.download = `DML_semana_${week}${dsel ? "_" + dsel.replace(/\s+/g,"-") : ""}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+});
+
+// ---------- início ----------
+resetForm(); fillNames();
+$("wLabel").textContent = `Semana ${isoWeek(week)} (atual)`; $("wRange").textContent = rangeLabel(week); renderWeek();
+
+// ---------- login ----------
+$("btnEntrar").addEventListener("click", () => { $("loginMsg").innerHTML = ""; show("login"); $("lEmail").focus(); });
+$("btnLoginCancel").addEventListener("click", () => show("semanas"));
+$("btnSair").addEventListener("click", async () => { await signOut(auth); });
+$("loginForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  $("loginMsg").innerHTML = "";
+  try {
+    await signInWithEmailAndPassword(auth, $("lEmail").value.trim(), $("lSenha").value);
+    $("lSenha").value = "";
+    resetForm(); show("nova");
+  } catch (err) {
+    $("loginMsg").innerHTML = `<div class="msg err">E-mail ou senha incorretos. Confira e tente de novo.</div>`;
+  }
+});
+onAuthStateChanged(auth, user => {
+  canWrite = !!user;
+  $("btnEntrar").hidden = !!user;
+  $("btnSair").hidden = !user;
+  $("who").hidden = !user;
+  $("who").textContent = user ? user.email : "";
+  applyWriteAccess();
+});
+subscribeWeek();
+</script>
+</body>
+</html>
