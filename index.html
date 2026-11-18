@@ -154,6 +154,13 @@ details.tabela[open] summary { margin-bottom: 12px; }
 .pill.ok { background: var(--ok-bg); color: var(--ok-fg); }
 .pill.wait { background: var(--wait-bg); color: var(--wait-fg); }
 .pill.miss { background: var(--miss-bg); color: var(--miss-fg); }
+.pill.none { background: var(--soft); color: var(--muted); border: 1px solid var(--line); }
+.nada { display: flex; gap: 10px; align-items: center; padding: 12px 14px; border: 1px dashed var(--line); border-radius: 6px; font-weight: 700; cursor: pointer; }
+.nada input { width: 18px; height: 18px; accent-color: var(--accent); }
+.nada.on { border-style: solid; border-color: var(--accent); background: var(--soft); }
+.nada-txt { font-size: 14px; color: var(--muted); font-style: italic; }
+.hbar .vl.nd { font-weight: 400; font-style: italic; color: var(--muted); white-space: nowrap; }
+.hbar { grid-template-columns: minmax(90px, 38%) 1fr auto; }
 li .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
 li .dot.ok { background: #334d3f; } li .dot.wait { background: #c98a16; } li .dot.miss { background: #ad3349; }
 .empty { color: var(--muted); font-size: 14px; padding: 18px; text-align: center; border: 1px dashed var(--line); border-radius: 6px; }
@@ -209,11 +216,13 @@ li .dot.ok { background: #334d3f; } li .dot.wait { background: #c98a16; } li .do
 
     <div class="panel" style="margin-top:20px">
       <div class="row"><h2>Produtos</h2><span class="spacer"></span><span class="count" id="selCount">Nenhum produto preenchido</span></div>
-      <div class="prodtools">
+      <label class="nada" id="nadaBox"><input type="checkbox" id="fNada"> Este DML não pediu nada</label>
+      <div class="prodtools" id="prodtools">
         <input id="fBusca" type="search" placeholder="Buscar produto (ex.: saco preto, papel)">
         <button class="btn small" id="btnTodosEntregues" type="button">Marcar todos como entregues</button>
       </div>
       <div class="plist" id="plist"></div>
+      <div class="nada-txt" id="nadaTxt" hidden>Nenhum produto será lançado. A ficha fica registrada como "Não pediu nada" para este DML.</div>
       <label class="f"><span>Observação</span><textarea id="fObs" placeholder="Opcional"></textarea></label>
       <div class="formfoot">
         <div id="formMsg" role="status"></div>
@@ -373,6 +382,13 @@ $("btnTodosEntregues").addEventListener("click", () => {
   if (!$("fDataEnt").value) $("fDataEnt").value = hoje;
   renderProdutos();
 });
+function applyNada() {
+  const on = $("fNada").checked;
+  $("nadaBox").classList.toggle("on", on);
+  $("plist").hidden = on; $("prodtools").hidden = on; $("nadaTxt").hidden = !on;
+  $("selCount").hidden = on;
+}
+$("fNada").addEventListener("change", applyNada);
 function updateCount() {
   const n = Object.keys(qtd).length, u = Object.values(qtd).reduce((a,b) => a+b, 0);
   $("selCount").textContent = n ? `${n} produto${n>1?"s":""} · ${u} unidade${u>1?"s":""}` : "Nenhum produto preenchido";
@@ -381,7 +397,7 @@ function msg(text, kind) { $("formMsg").innerHTML = text ? `<div class="msg ${ki
 
 function resetForm(keepMsg) {
   editingId = null; qtd = {}; st = {};
-  $("fDml").value = ""; $("fSol").value = ""; $("fDataSol").value = hoje; $("fDataEnt").value = ""; $("fObs").value = ""; $("fBusca").value = "";
+  $("fDml").value = ""; $("fSol").value = ""; $("fDataSol").value = hoje; $("fDataEnt").value = ""; $("fObs").value = ""; $("fBusca").value = ""; $("fNada").checked = false; applyNada();
   $("formEyebrow").textContent = "Nova ficha"; $("formTitle").textContent = "Registrar solicitação de produtos";
   $("btnSalvar").textContent = "Salvar ficha"; $("btnCancelar").hidden = true;
   if (!keepMsg) msg("");
@@ -394,7 +410,7 @@ function loadIntoForm(id, f) {
   editingId = id; qtd = {}; st = {};
   for (const it of (f.itens || [])) { const i = PRODUTOS.indexOf(it.p); if (i >= 0) { qtd[i] = it.q; st[i] = it.s || "p"; } }
   $("fDml").value = f.dml || ""; $("fSol").value = f.solicitante || ""; $("fDataSol").value = f.dataSolicitacao || hoje;
-  $("fDataEnt").value = f.dataEntrega || ""; $("fObs").value = f.obs || ""; $("fBusca").value = "";
+  $("fDataEnt").value = f.dataEntrega || ""; $("fObs").value = f.obs || ""; $("fBusca").value = ""; $("fNada").checked = !!f.semNada; applyNada();
   $("formEyebrow").textContent = "Editando ficha"; $("formTitle").textContent = `DML - ${f.dml} · ${f.solicitante}`;
   $("btnSalvar").textContent = "Salvar alterações"; $("btnCancelar").hidden = false;
   msg(""); renderProdutos(); show("nova"); window.scrollTo({ top: 0 });
@@ -408,13 +424,14 @@ function fillNames() { $("solList").innerHTML = recentNames().map(n => `<option 
 $("btnSalvar").addEventListener("click", async () => {
   const dml = $("fDml").value, sol = $("fSol").value.trim(), ds = $("fDataSol").value, de = $("fDataEnt").value;
   if (!dml) return msg("Escolha o DML.", "err");
-  if (!sol) return msg("Preencha o nome do solicitante.", "err");
+  const nada = $("fNada").checked;
+  if (!sol) return msg(nada ? "Preencha quem respondeu pelo DML (ou o seu nome)." : "Preencha o nome do solicitante.", "err");
   if (!ds) return msg("Preencha a data da solicitação.", "err");
   if (de && de < ds) return msg("A data de entrega está antes da data de solicitação.", "err");
-  const itens = PRODUTOS.map((p, i) => qtd[i] > 0 ? { p, q: qtd[i], s: st[i] || "p" } : null).filter(Boolean);
-  if (!itens.length) return msg("Preencha a quantidade de pelo menos um produto.", "err");
+  const itens = nada ? [] : PRODUTOS.map((p, i) => qtd[i] > 0 ? { p, q: qtd[i], s: st[i] || "p" } : null).filter(Boolean);
+  if (!nada && !itens.length) return msg("Preencha a quantidade de pelo menos um produto ou marque \"Este DML não pediu nada\".", "err");
   if (!db) return msg("Não deu para conectar ao banco de dados agora. Tente de novo em instantes.", "err");
-  const body = { dml, solicitante: sol, dataSolicitacao: ds, dataEntrega: de || "", semana: mondayOf(ds), itens, obs: $("fObs").value.trim() };
+  const body = { dml, solicitante: sol, dataSolicitacao: ds, dataEntrega: de || "", semana: mondayOf(ds), itens, semNada: nada, obs: $("fObs").value.trim() };
   $("btnSalvar").disabled = true;
   try {
     if (editingId) {
@@ -427,7 +444,7 @@ $("btnSalvar").addEventListener("click", async () => {
     rememberName(sol);
     const wasEdit = !!editingId;
     resetForm(true);
-    msg(wasEdit ? "Alterações salvas." : `Ficha salva: DML - ${dml}, ${itens.length} produto${itens.length>1?"s":""}.`, "ok");
+    msg(wasEdit ? "Alterações salvas." : nada ? `Registrado: DML - ${dml} não pediu nada.` : `Ficha salva: DML - ${dml}, ${itens.length} produto${itens.length>1?"s":""}.`, "ok");
   } catch (e) {
     if (e && e.code === "permission-denied") msg("Sem permissão para salvar. Entre de novo com seu e-mail e senha.", "err");
     else msg("Não foi possível salvar agora. Confira a conexão e tente de novo.", "err");
@@ -486,9 +503,9 @@ function delta(el, now, prev) {
   el.textContent = d === 0 ? "igual à semana anterior" : (d > 0 ? "+" : "−") + Math.abs(d) + " vs. semana anterior";
   el.className = d > 0 ? "up" : "";
 }
-function hbars(rows, max, dimFn) {
+function hbars(rows, max, dimFn, noteFn) {
   return rows.map(([lb, v]) => `<div class="hbar${v ? "" : " zero"}${dimFn && dimFn(lb) ? " dim" : ""}" title="${esc(lb)}: ${v} unidade${v === 1 ? "" : "s"}">
-    <span class="lb">${esc(lb)}</span><span class="tr"><span class="br" style="width:${max ? (v / max * 100) : 0}%"></span></span><span class="vl">${v}</span></div>`).join("");
+    <span class="lb">${esc(lb)}</span><span class="tr"><span class="br" style="width:${max ? (v / max * 100) : 0}%"></span></span>${!v && noteFn && noteFn(lb) ? `<span class="vl nd">não pediu</span>` : `<span class="vl">${v}</span>`}</div>`).join("");
 }
 function renderWeek() {
   const list = filtered();
@@ -496,7 +513,7 @@ function renderWeek() {
   const u = units(list);
   $("sFichas").textContent = list.length;
   $("sItens").textContent = u;
-  $("sDmls").textContent = new Set(list.map(f => f.dml)).size;
+  $("sDmls").textContent = new Set(list.filter(f => !f.semNada).map(f => f.dml)).size;
   $("sPend").textContent = list.reduce((a, f) => a + (f.itens||[]).filter(i => i.s === "p").length, 0);
   delta($("dFichas"), list.length, prevList.length);
   delta($("dItens"), u, units(prevList));
@@ -507,7 +524,7 @@ function renderWeek() {
   const all = weekDocs, sel = $("wDml").value;
   const perDml = DMLS.map(d => [d, units(all.filter(f => f.dml === d))]).sort((a, b) => b[1] - a[1]);
   const maxD = Math.max(0, ...perDml.map(r => r[1]));
-  $("cDml").innerHTML = waiting ? `<div class="empty">${waiting}</div>` : hbars(perDml, maxD, sel ? (lb => lb !== sel) : null);
+  $("cDml").innerHTML = waiting ? `<div class="empty">${waiting}</div>` : hbars(perDml, maxD, sel ? (lb => lb !== sel) : null, lb => all.some(f => f.dml === lb && f.semNada) && !all.some(f => f.dml === lb && !f.semNada));
 
   // produtos mais pedidos
   const pt = {};
@@ -553,11 +570,12 @@ function renderWeek() {
     return;
   }
   $("fichas").innerHTML = list.map(f => {
-    const s = fichaStatus(f), [lbl, cls] = STATUS[s];
+    const [lbl, cls] = f.semNada ? ["Não pediu nada", "none"] : STATUS[fichaStatus(f)];
     return `<article class="ficha" data-id="${esc(f.id)}">
       <div class="top"><span class="dml">DML - ${esc(f.dml)}</span><span class="pill ${cls}">${lbl}</span><span class="spacer"></span>
         ${canWrite ? `<button class="btn small" data-act="edit" type="button">Editar</button><button class="btn small danger" data-act="del" type="button">Excluir</button>` : ""}</div>
-      <div class="meta">Solicitante: <b>${esc(f.solicitante)}</b> · Solicitado em ${br(f.dataSolicitacao)} · ${f.dataEntrega ? "Entregue em " + br(f.dataEntrega) : "Sem data de entrega"}</div>
+      <div class="meta">${f.semNada ? `Registrado por: <b>${esc(f.solicitante)}</b> · Em ${br(f.dataSolicitacao)}` : `Solicitante: <b>${esc(f.solicitante)}</b> · Solicitado em ${br(f.dataSolicitacao)} · ${f.dataEntrega ? "Entregue em " + br(f.dataEntrega) : "Sem data de entrega"}`}</div>
+      ${f.semNada ? `<div class="nada-txt">Este setor não pediu nenhum produto.</div>` : ""}
       <ul>${(f.itens||[]).map(i => `<li><span class="dot ${STATUS[i.s||"p"][1]}" title="${STATUS[i.s||"p"][0]}"></span>${esc(i.p)} <b>× ${i.q}</b></li>`).join("")}</ul>
       ${f.obs ? `<div class="obs">${esc(f.obs)}</div>` : ""}
     </article>`;
@@ -583,8 +601,10 @@ $("wCsv").addEventListener("click", async () => {
   const list = filtered();
   const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const rows = [["Semana", "DML", "Solicitante", "Data solicitação", "Data entrega", "Produto", "Quantidade", "Status", "Observação"]];
-  for (const f of list) for (const i of f.itens || [])
-    rows.push([`${br(week)} a ${br(addDays(week,6))}`, "DML - " + f.dml, f.solicitante, br(f.dataSolicitacao), br(f.dataEntrega), i.p, i.q, STATUS[i.s||"p"][0], f.obs || ""]);
+  for (const f of list) {
+    if (f.semNada) rows.push([`${br(week)} a ${br(addDays(week,6))}`, "DML - " + f.dml, f.solicitante, br(f.dataSolicitacao), "", "Não pediu nada", 0, "", f.obs || ""]);
+    for (const i of f.itens || []) rows.push([`${br(week)} a ${br(addDays(week,6))}`, "DML - " + f.dml, f.solicitante, br(f.dataSolicitacao), br(f.dataEntrega), i.p, i.q, STATUS[i.s||"p"][0], f.obs || ""]);
+  }
   const csv = "﻿" + rows.map(r => r.map(q).join(";")).join("\r\n");
   const dsel = $("wDml").value;
   const a = document.createElement("a");
